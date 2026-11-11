@@ -213,7 +213,7 @@ def test_write_rpc_writes_a_protocol_message_to_a_device(world):
 def test_bus_ends_publish_and_consume_openfmb_profiles(world):
     """A device -> OpenFMB topic bridge publishes the profile with the on-bus headers; an OpenFMB topic -> device
     bridge writes what arrives there, except what this agent published itself."""
-    from interoperability import openfmb_bus
+    from icm.resources.openfmb import bus as openfmb_bus
     a, fake = world
     a.core.identity = 'platform.resource_bridge'
     a.configure_main(None, 'NEW', {'bridges': [

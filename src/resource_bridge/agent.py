@@ -27,7 +27,7 @@ A *bridge* has a source and a target. A device end is a device behind the platfo
 (the ``devices/<device>/all`` polls and the ``/multi`` pushes a served device receives from its peer), written through
 ``set_multiple_points``. A bus end is a topic on VOLTTRON's own bus carrying messages in the end's alias format, an
 OpenFMB profile topic (``openfmb/<module>/<Profile>/<mRID>``) in practice: read from it, or published to it with the
-headers of ``interoperability.openfmb_bus``. The presentation service supplies the chain between the two formats,
+headers of ``icm.resources.openfmb.bus``. The presentation service supplies the chain between the two formats,
 scored on the fields each message carries; this agent owns the subscriptions, the writes and publishes, and the policy
 (change-only writes, echo suppression, ordered curve batches, per-point error reporting).
 
@@ -59,9 +59,9 @@ except PackageNotFoundError:
     from volttron.platform.messaging.health import STATUS_BAD, STATUS_GOOD
     from volttron.platform.vip.agent import Agent, RPC
 
-from interoperability import openfmb_bus
-from interoperability.resource import ALL, MULTI, ResourceWriter, message_values, same_value
-from interoperability.transform_parser import TransformParser
+from icm.resources.openfmb import bus as openfmb_bus
+from icm.resources.resource import ALL, MULTI, ResourceWriter, message_values, same_value
+from icm.transforms.parser import TransformParser
 
 from .config import BridgeConfig, ResourceBridgeConfig, EndConfig
 from .writer import DeviceWriter, WriteResult
