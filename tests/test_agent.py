@@ -112,6 +112,16 @@ def test_helpers():
     assert device_of('devices/site1/pv/all') == device_of('devices/site1/pv/multi') == device_of('site1/pv') == 'site1/pv'
 
 
+def test_a_source_published_in_multi_mode_is_subscribed_at_its_device_base(world):
+    """A device entry choosing /multi gives its resource a publication topic ending in /multi; the bridge must strip that
+    suffix as it strips /all, or it subscribes to .../multi/all and .../multi/multi and never hears the device."""
+    a, fake = world
+    fake.resources[('site1', 'pv')] = {**SOURCE, 'publication_topic': 'devices/site1/pv/multi'}
+    configure(a)
+    assert {'devices/site1/pv/all', 'devices/site1/pv/multi'} <= set(fake.subscriptions)
+    assert not any(t.startswith('devices/site1/pv/multi/') for t in fake.subscriptions)
+
+
 def test_configure_resolves_both_ends_and_subscribes_to_polls_and_pushes(world):
     a, fake = world
     configure(a)

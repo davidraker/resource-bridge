@@ -239,9 +239,13 @@ class ResourceBridgeAgent(Agent):
             if not resolved.get('publication_topic'):
                 self._report_bad_status(f'Bridge {bridge}: {end.key} leads to a resource without a publication_topic; nothing to bridge.')
                 return None
+            # The device's base topic: the publication topic less its /all or /multi suffix (a device publishes on one
+            # of the two, as its entry says). Both are subscribed to, so a change of publish mode needs no rewiring.
             device = resolved['publication_topic'].rstrip('/')
-            if device.endswith(f'/{ALL}'):
-                device = device[:-len(ALL) - 1]
+            for suffix in (ALL, MULTI):
+                if device.endswith(f'/{suffix}'):
+                    device = device[:-len(suffix) - 1]
+                    break
             return End(end, resolved['data_format'], [f'{device}/{ALL}', f'{device}/{MULTI}'], resolved.get('rpc_topic'))
         if not resolved.get('rpc_topic'):
             self._report_bad_status(f'Bridge {bridge}: {end.key} leads to a resource without an rpc_topic; it cannot be written.')
