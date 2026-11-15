@@ -51,13 +51,13 @@ try:
     distribution('volttron-core')
     from volttron.client import Agent
     from volttron.client.messaging.health import STATUS_BAD, STATUS_GOOD
-    from volttron.client.vip.agent import RPC
+    from volttron.client.vip.agent import Core, RPC
     from volttron.utils import load_config, vip_main
 except PackageNotFoundError:
     # The monolithic platform (and der-control-fastlib's compatibility layer) provide the same names here.
     from volttron.platform.agent.utils import load_config, vip_main
     from volttron.platform.messaging.health import STATUS_BAD, STATUS_GOOD
-    from volttron.platform.vip.agent import Agent, RPC
+    from volttron.platform.vip.agent import Core, Agent, RPC
 
 from icm.resources.openfmb import bus as openfmb_bus
 from icm.resources.assembler import Assembler, Ticker
@@ -154,6 +154,12 @@ class Bridge:
 
 class ResourceBridgeAgent(Agent):
     """Mirrors device publications into other devices, or OpenFMB profiles on the bus, through the service's chains."""
+    @Core.receiver('onstart')
+    def _start_heartbeat(self, sender, **kwargs):
+        # The platform's health service learns of an agent from its heartbeats; without them the status this agent
+        # sets never reaches the health listing (nor the configuration UI).
+        self.vip.heartbeat.start()
+
 
     def __init__(self, config_path: str | None = None, **kwargs):
         super().__init__(**kwargs)
