@@ -414,3 +414,34 @@ def test_delivery_policy_is_validated_in_configuration():
         ResourceBridgeConfig(bridges=[{'source': 'a/b', 'target': 'c/d', 'delivery': {'kind': 'interval'}}])
     cfg = ResourceBridgeConfig(bridges=[{'source': 'a/b', 'target': 'c/d', 'delivery': {'kind': 'merge', 'stale_after': 30}}])
     assert cfg.bridges[0].delivery.kind == 'merge'
+
+
+def test_a_bridge_whose_ends_do_not_resolve_yet_is_tried_again(world):
+    """At platform start the presentation service may not answer yet (an RPC timeout) or not know the resource until
+    it has its configuration. The bridge is retried with a growing delay instead of being given up, and a retry of an
+    earlier configuration stops once a new one arrived."""
+    import gevent
+    a, fake = world
+    original = fake.rpc_call
+    calls = {'n': 0}
+    def failing_resolve(peer, method, *args, **kwargs):
+        if method == 'resolve':
+            calls['n'] += 1
+            if calls['n'] <= 2:
+                raise gevent.Timeout(1)                  # the service is not answering
+        return original(peer, method, *args, **kwargs)
+    a.vip.rpc.call.side_effect = failing_resolve
+    configure(a)
+    assert 'pv_to_mirror' not in a.bridges
+    assert a.core.spawn_later.call_count == 1 and a.core.spawn_later.call_args.args[0] == 5
+    a.core.spawn_later.call_args.args[1]()                # first retry: still failing, scheduled again, later
+    assert 'pv_to_mirror' not in a.bridges and a.core.spawn_later.call_args.args[0] == 10
+    a.core.spawn_later.call_args.args[1]()                # second retry: the service answers
+    assert 'pv_to_mirror' in a.bridges
+    assert {'devices/site1/pv/all', 'devices/site1/pv/multi'} <= set(fake.subscriptions)
+    # a retry left over from before a reconfiguration does nothing
+    stale = a.core.spawn_later.call_args.args[1]
+    a.configure_main(None, 'UPDATE', {'bridges': []})
+    assert a.bridges == {}
+    stale()
+    assert a.bridges == {}

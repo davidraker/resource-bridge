@@ -201,6 +201,7 @@ class ResourceBridgeAgent(Agent):
             writer.unsubscribe()
         self._writers.clear()               # the driver identity or stale_after may have changed; knowledge is rebuilt
         self.config = new_config
+        self._generation = getattr(self, '_generation', 0) + 1     # retries of an earlier configuration stop here
         self.writer = DeviceWriter(self._rpc, self.config.driver)
         self._warn_shared_targets(self.config.bridges)
         for bridge_config in self.config.bridges:
@@ -267,14 +268,33 @@ class ResourceBridgeAgent(Agent):
             self._writers[device] = writer
         return writer
 
-    def _start_bridge(self, config: BridgeConfig) -> Bridge | None:
+    #: Seconds between attempts to build a bridge whose ends did not resolve: the presentation service comes up
+    #: beside this agent at platform start and may answer only later, or not know a resource until it has its config.
+    RETRY_DELAYS = (5, 10, 20, 40, 60)
+
+    def _start_bridge(self, config: BridgeConfig, attempt: int = 0) -> Bridge | None:
+        generation = getattr(self, '_generation', 0)
         try:
             source = self._resolve_end(config.key, config.source, 'source')
             target = self._resolve_end(config.key, config.target, 'target') if source else None
-        except Exception as e:
-            self._report_bad_status(f'Bridge {config.key}: unable to resolve its ends through {self.config.presentation_service}: {e!r}')
-            return None
+        except BaseException as e:      # gevent's Timeout is not an Exception; an unanswered RPC must not kill the greenlet
+            if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise
+            source = target = None
+            reason = f'unable to resolve its ends through {self.config.presentation_service}: {e!r}'
+        else:
+            reason = 'its ends did not resolve' if source is None or target is None else None
         if source is None or target is None:
+            delay = self.RETRY_DELAYS[min(attempt, len(self.RETRY_DELAYS) - 1)]
+            level = _log.warning if attempt == 0 or attempt % 5 == 0 else _log.debug
+            level(f'Bridge {config.key}: {reason}; trying again in {delay} s (attempt {attempt + 1}).')
+            if attempt == 0:
+                self._report_bad_status(f'Bridge {config.key}: {reason}; retrying.')
+
+            def retry():
+                if getattr(self, '_generation', 0) == generation and config.key not in self.bridges:
+                    self._start_bridge(config, attempt + 1)
+            self.core.spawn_later(delay, retry)
             return None
         bridge = Bridge(config, source, target)
         if config.delivery is not None and config.delivery.kind != 'each':
@@ -292,6 +312,8 @@ class ResourceBridgeAgent(Agent):
         self.bridges[bridge.key] = bridge
         _log.info(f'Bridge {bridge.key}: {source.topics[0]} ({source.format}) -> '
                   f'{target.topics[0] if target.bus else target.rpc_topic} ({target.format}).')
+        if getattr(self.core, 'connected', False) and all(b.key in self.bridges for b in self.config.bridges if b.enabled):
+            self.vip.health.set_status(STATUS_GOOD, f'{len(self.bridges)} bridge(s) running.')
         return bridge
 
     def _arm_ticker(self, bridge: Bridge) -> None:
