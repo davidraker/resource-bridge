@@ -445,3 +445,17 @@ def test_a_bridge_whose_ends_do_not_resolve_yet_is_tried_again(world):
     assert a.bridges == {}
     stale()
     assert a.bridges == {}
+
+
+def test_merge_delivery_from_a_device_merges_every_point_seen(world):
+    """A device publishes what changed (a served outstation pushes one point per write); with a merge policy the chain
+    sees the whole device as known so far, not the arrival, so a stored curve's points reach the hub together."""
+    a, fake = world
+    configure(a, delivery={'kind': 'merge'})
+    bridge = a.bridges['pv_to_mirror']
+    publish = fake.subscriptions['devices/site1/pv/multi']
+    publish('pubsub', 'platform.driver', 'bus', 'devices/site1/pv/multi', {}, [{'W': 1000}, {}])
+    publish('pubsub', 'platform.driver', 'bus', 'devices/site1/pv/multi', {}, [{'Hz': 60}, {}])
+    assert bridge.assembler.required >= {'W', 'Hz'}, 'every point seen from the device is merged into later messages'
+    report = [m for t, m in fake.published if t.startswith('resource_bridge/')][-1]
+    assert report['assembly']['fresh'] == ['Hz'] and 'W' in report['assembly']['merged']

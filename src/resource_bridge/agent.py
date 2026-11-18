@@ -366,6 +366,11 @@ class ResourceBridgeAgent(Agent):
             return None
         assembly = None
         if bridge.assembler is not None:
+            if not bridge.source.bus and bridge.assembler.policy.kind in ('merge', 'trigger'):
+                # A device's state is the whole of its points, and a device publishes what changed (a served
+                # outstation pushes one point per write). Merging over every point seen gives the chain the device,
+                # not the arrival: a stored curve reaches the hub whole, with the index the function names.
+                bridge.assembler.required = bridge.assembler.required | frozenset(values)
             emit = bridge.assembler.offer(values)
             self._arm_ticker(bridge)
             if emit is None:
