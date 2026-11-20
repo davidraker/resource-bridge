@@ -47,6 +47,8 @@ pydantic = "^2.0"
 #  It must be installed alongside this agent, e.g. from ../interoperability_service.
 
 [tool.poetry.group.dev.dependencies]
+# run_harness for the end-to-end matrix; the service harness it runs imports volttrontesting.harness too.
+volttron-testing = ">0.5.1rc4"
 pytest = "^8.0.0"
 pytest-cov = "^6.0.0"
 mock = "^4.0.3"

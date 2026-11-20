@@ -8,12 +8,12 @@ interfaces run in both roles through real proxies; VOLTTRON's bus is stubbed. Sk
 importable. About a minute per mode.
 """
 import os
-import subprocess
-import sys
 
 from pathlib import Path
 
 import pytest
+
+from volttrontesting.harness import run_harness
 
 for module in ('volttron.driver.interfaces.modbus.modbus', 'volttron.driver.interfaces.dnp3.dnp3',
                'volttron.driver.interfaces.ieee2030_5.ieee2030_5', 'protocol_proxy.protocol.modbus',
@@ -30,14 +30,9 @@ EXPECTED_PATHS = 24
 @pytest.mark.skipif(not HARNESS.exists(), reason=f'service harness not found at {HARNESS}')
 @pytest.mark.parametrize('openfmb_mode', ['harness', 'bus'])
 def test_matrix(tmp_path, openfmb_mode):
-    log = tmp_path / 'e2e.log'
-    proc = subprocess.run([sys.executable, str(HARNESS), str(tmp_path / 'work')], capture_output=True, text=True, timeout=1200,
-                          env={**os.environ, 'E2E_LOG': str(log), 'E2E_WRITER': 'resource_bridge', 'E2E_OPENFMB': openfmb_mode})
-    report = proc.stdout + proc.stderr
-    if proc.returncode != 0 and log.exists():
-        report += '\n--- log ---\n' + log.read_text()[-6000:]
-    assert proc.returncode == 0, report
-    assert f'writer: resource_bridge; openfmb: {openfmb_mode}' in proc.stdout and f'{EXPECTED_PATHS}/{EXPECTED_PATHS} passed' in proc.stdout, report
-    assert proc.stdout.count('[resource_bridge/') == 12, report          # every device-to-device path went through a bridge
+    result = run_harness(HARNESS, tmp_path / 'work', log_path=tmp_path / 'e2e.log', timeout=1200,
+                         env={'E2E_WRITER': 'resource_bridge', 'E2E_OPENFMB': openfmb_mode}).assert_ok()
+    assert f'writer: resource_bridge; openfmb: {openfmb_mode}' in result.stdout and f'{EXPECTED_PATHS}/{EXPECTED_PATHS} passed' in result.stdout, result.report
+    assert result.stdout.count('[resource_bridge/') == 12, result.report          # every device-to-device path went through a bridge
     if openfmb_mode == 'bus':
-        assert proc.stdout.count('via bridge') == 6 and proc.stdout.count('broker got a ') == 6, report
+        assert result.stdout.count('via bridge') == 6 and result.stdout.count('broker got a ') == 6, result.report
